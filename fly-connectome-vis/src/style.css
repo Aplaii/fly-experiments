@@ -12,18 +12,37 @@ body, html {
   height: 100vh;
 }
 
-#graph-container {
-  width: 100%;
-  height: 100%;
+#world-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+}
+
+#brain-container {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 350px;
+  height: 350px;
+  z-index: 10;
+  border: 1px solid rgba(0, 255, 170, 0.3);
+  border-radius: 8px;
+  background: rgba(10, 20, 40, 0.9);
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
 }
 
 #ui-layer {
   position: absolute;
-  top: 20px;
+  bottom: 20px;
   left: 20px;
   color: #fff;
-  pointer-events: none; /* Let clicks pass through to canvas */
+  pointer-events: none;
   text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  z-index: 10;
 }
 
 #ui-layer h1 {

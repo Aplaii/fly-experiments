@@ -4,56 +4,48 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // Setup basic UI
 document.querySelector('#app').innerHTML = `
+  <div id="world-container"></div>
+  <div id="brain-container"></div>
   <div id="ui-layer">
-    <h1>Fly Brain Connectome Preview</h1>
-    <p>Orthographic 2D Blueprint (Color-Coded by Neuron Type)</p>
-    <div id="stats">Initializing world...</div>
+    <h1>Fly Brain Simulation</h1>
+    <p>Living 3D World (Background) + 2D Connectome Blueprint (Top Left)</p>
+    <div id="stats">Initializing...</div>
   </div>
 `;
 
-// 1. Scene, Camera, Renderer
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a1e3f, 0.0015); // Deep blue misty world
+// ==========================================
+// 1. WORLD SETUP (Main Background)
+// ==========================================
+const worldContainer = document.getElementById('world-container');
+const worldScene = new THREE.Scene();
+worldScene.fog = new THREE.FogExp2(0x0a1e3f, 0.0015);
 
-const aspect = window.innerWidth / window.innerHeight;
-const frustumSize = 1000;
-const camera = new THREE.OrthographicCamera(
-  (frustumSize * aspect) / -2,
-  (frustumSize * aspect) / 2,
-  frustumSize / 2,
-  frustumSize / -2,
-  0.1,
-  5000
-);
-camera.position.set(0, 0, 1500);
+const worldCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+worldCamera.position.set(0, 300, 800);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setClearColor(scene.fog.color);
-document.getElementById('app').appendChild(renderer.domElement);
+const worldRenderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+worldRenderer.setSize(window.innerWidth, window.innerHeight);
+worldRenderer.setPixelRatio(window.devicePixelRatio);
+worldRenderer.setClearColor(worldScene.fog.color);
+worldContainer.appendChild(worldRenderer.domElement);
 
-// Controls
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
+const worldControls = new OrbitControls(worldCamera, worldRenderer.domElement);
+worldControls.enableDamping = true;
+worldControls.dampingFactor = 0.05;
 
-// 2. Create the World (Grid, Lights, Environment)
-const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
-scene.add(ambientLight);
-
+// World Environment
+worldScene.add(new THREE.AmbientLight(0x404040));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
 dirLight.position.set(200, 500, 300);
-scene.add(dirLight);
+worldScene.add(dirLight);
 
-// A digital grid floor for the "world"
 const gridHelper = new THREE.GridHelper(4000, 100, 0x00ffaa, 0x004433);
-gridHelper.position.y = -600;
-scene.add(gridHelper);
+gridHelper.position.y = -200;
+worldScene.add(gridHelper);
 
-// Floating dust/spores in the environment
+// Spores
 const envGeo = new THREE.BufferGeometry();
-const envCount = 5000;
+const envCount = 2000;
 const envPositions = new Float32Array(envCount * 3);
 for (let i = 0; i < envCount * 3; i++) {
   envPositions[i] = (Math.random() - 0.5) * 4000;
@@ -61,36 +53,69 @@ for (let i = 0; i < envCount * 3; i++) {
 envGeo.setAttribute('position', new THREE.BufferAttribute(envPositions, 3));
 const envMat = new THREE.PointsMaterial({ color: 0x88ccff, size: 2, transparent: true, opacity: 0.4 });
 const envPoints = new THREE.Points(envGeo, envMat);
-scene.add(envPoints);
+worldScene.add(envPoints);
 
-// 3. Load the 141k Neuron PointCloud
-let brainPoints;
-let originalPositions; // Store original positions for pulsing animation
-let colors;
+// Simulated Flies in the World
+const fliesGroup = new THREE.Group();
+for(let i=0; i<50; i++) {
+  const flyMesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(5, 10, 4, 8),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x00ffaa, emissiveIntensity: 0.5 })
+  );
+  flyMesh.position.set((Math.random() - 0.5) * 1000, (Math.random()) * 400, (Math.random() - 0.5) * 1000);
+  flyMesh.userData = { 
+    speed: Math.random() * 2 + 1, 
+    offset: Math.random() * Math.PI * 2 
+  };
+  fliesGroup.add(flyMesh);
+}
+worldScene.add(fliesGroup);
 
+
+// ==========================================
+// 2. BRAIN PREVIEW SETUP (Top Left)
+// ==========================================
+const brainContainer = document.getElementById('brain-container');
+const brainScene = new THREE.Scene();
+
+const bWidth = 350;
+const bHeight = 350;
+const aspect = bWidth / bHeight;
+const frustumSize = 1000;
+const brainCamera = new THREE.OrthographicCamera(
+  (frustumSize * aspect) / -2,
+  (frustumSize * aspect) / 2,
+  frustumSize / 2,
+  frustumSize / -2,
+  0.1,
+  5000
+);
+brainCamera.position.set(0, 0, 1500);
+
+const brainRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+brainRenderer.setSize(bWidth, bHeight);
+brainRenderer.setPixelRatio(window.devicePixelRatio);
+brainContainer.appendChild(brainRenderer.domElement);
+
+const brainControls = new OrbitControls(brainCamera, brainRenderer.domElement);
+brainControls.enableDamping = true;
+brainControls.dampingFactor = 0.05;
+
+// Load the 141k Neuron PointCloud into the Brain Scene
 fetch('full_brain.json')
   .then(res => res.json())
   .then(nodes => {
-    document.getElementById('stats').innerText = `Rendering ${nodes.length.toLocaleString()} Neurons`;
+    document.getElementById('stats').innerText = \`Loaded \${nodes.length.toLocaleString()} neurons in preview.\`;
 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(nodes.length * 3);
-    colors = new Float32Array(nodes.length * 3);
-    
-    // We will store original coords to animate them
-    originalPositions = new Float32Array(nodes.length * 3);
+    const colors = new Float32Array(nodes.length * 3);
 
     nodes.forEach((node, i) => {
-      // Swapping Y and Z so the brain stands up correctly, depending on standard orientation
-      // Neuprint is often X, Y, Z where Z is depth. We'll use x, -y, z
       const idx = i * 3;
       positions[idx] = node.x;
       positions[idx + 1] = -node.y; // Invert Y
       positions[idx + 2] = node.z;
-
-      originalPositions[idx] = positions[idx];
-      originalPositions[idx + 1] = positions[idx + 1];
-      originalPositions[idx + 2] = positions[idx + 2];
 
       // Procedural color based on neuron type
       const color = new THREE.Color();
@@ -114,42 +139,48 @@ fetch('full_brain.json')
       vertexColors: true,
       blending: THREE.AdditiveBlending,
       transparent: true,
-      opacity: 0.8,
-      sizeAttenuation: true
+      opacity: 0.8
     });
 
-    brainPoints = new THREE.Points(geometry, material);
-    scene.add(brainPoints);
+    const brainPoints = new THREE.Points(geometry, material);
+    brainScene.add(brainPoints);
   });
 
-// 4. Animation Loop
+
+// ==========================================
+// 3. ANIMATION LOOP
+// ==========================================
 const clock = new THREE.Clock();
 
 function animate() {
   requestAnimationFrame(animate);
   const time = clock.getElapsedTime();
 
-  // Make the environment particles slowly drift
+  // Animate world
   envPoints.rotation.y = time * 0.02;
+  
+  fliesGroup.children.forEach(fly => {
+    fly.position.y += Math.sin(time * fly.userData.speed + fly.userData.offset) * 1.5;
+    fly.position.x += Math.cos(time * fly.userData.speed * 0.5) * 1;
+    fly.rotation.y = time;
+    fly.rotation.x = Math.sin(time);
+  });
 
-  // Animate the brain if it's loaded
-  if (brainPoints) {
-    // Keep it entirely static and unrotated for the preview
-    // We only update controls so the user can manually pan/zoom
-  }
+  worldControls.update();
+  worldRenderer.render(worldScene, worldCamera);
 
-  controls.update();
-  renderer.render(scene, camera);
+  // Animate brain preview
+  brainControls.update();
+  brainRenderer.render(brainScene, brainCamera);
 }
 
 animate();
 
 window.addEventListener('resize', () => {
-  const aspect = window.innerWidth / window.innerHeight;
-  camera.left = -frustumSize * aspect / 2;
-  camera.right = frustumSize * aspect / 2;
-  camera.top = frustumSize / 2;
-  camera.bottom = -frustumSize / 2;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  // Update World
+  worldCamera.aspect = window.innerWidth / window.innerHeight;
+  worldCamera.updateProjectionMatrix();
+  worldRenderer.setSize(window.innerWidth, window.innerHeight);
+  
+  // Brain is fixed 350x350, no need to resize it on window resize
 });
