@@ -30,19 +30,16 @@ function createFly() {
     roughness: 0.1, metalness: 0.1, transmission: 0.9, side: THREE.DoubleSide
   });
 
-  // Thorax
   const thorax = new THREE.Mesh(new THREE.SphereGeometry(3, 16, 16), bodyMat);
   thorax.scale.set(1, 0.8, 1.2);
   fly.add(thorax);
 
-  // Abdomen
   const abdomen = new THREE.Mesh(new THREE.SphereGeometry(3.5, 16, 16), bodyMat);
   abdomen.scale.set(0.9, 0.7, 1.6);
   abdomen.position.set(0, -1, -6);
   abdomen.rotation.x = -0.1;
   fly.add(abdomen);
 
-  // Head Group (allows looking around)
   const headGroup = new THREE.Group();
   headGroup.position.set(0, 0.5, 4.2);
   
@@ -50,7 +47,6 @@ function createFly() {
   head.scale.set(1.2, 1, 0.9);
   headGroup.add(head);
 
-  // Eyes
   const leftEye = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), eyeMat);
   leftEye.position.set(1.8, 0.5, 0.5);
   leftEye.scale.set(0.8, 1.2, 1);
@@ -61,7 +57,6 @@ function createFly() {
   rightEye.scale.set(0.8, 1.2, 1);
   headGroup.add(rightEye);
   
-  // Antennae
   const antennaGeo = new THREE.CylinderGeometry(0.1, 0.2, 2);
   const leftAntenna = new THREE.Mesh(antennaGeo, headMat);
   leftAntenna.position.set(0.5, 0.5, 2.5);
@@ -77,7 +72,6 @@ function createFly() {
 
   fly.add(headGroup);
 
-  // Wings
   const wingGeo = new THREE.PlaneGeometry(3, 10);
   const leftWing = new THREE.Mesh(wingGeo, wingMat);
   leftWing.position.set(1.5, 2.5, -2);
@@ -91,7 +85,6 @@ function createFly() {
   rightWing.rotation.y = 0.3;
   fly.add(rightWing);
   
-  // Legs Factory
   const legs = [];
   function createLeg(x, y, z, rotY, isLeft) {
     const legGroup = new THREE.Group();
@@ -99,18 +92,15 @@ function createFly() {
     legGroup.rotation.y = rotY;
     legGroup.rotation.z = isLeft ? Math.PI / 4 : -Math.PI / 4;
     
-    // Femur
     const femur = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.2, 4), legMat);
     femur.position.y = -2;
     legGroup.add(femur);
     
-    // Tibia Group (allows knee bending)
     const tibiaGroup = new THREE.Group();
     tibiaGroup.position.y = -4;
     tibiaGroup.rotation.z = isLeft ? -1.0 : 1.0; 
     legGroup.add(tibiaGroup);
     
-    // Tibia
     const tibia = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.1, 5), legMat);
     tibia.position.y = -2.5;
     tibiaGroup.add(tibia);
@@ -119,17 +109,12 @@ function createFly() {
     return { root: legGroup, knee: tibiaGroup, isLeft };
   }
   
-  // Front Legs
-  legs.push(createLeg(1.5, -1, 2.5, 0.5, true)); // Front Left
-  legs.push(createLeg(-1.5, -1, 2.5, -0.5, false)); // Front Right
-  
-  // Mid Legs
-  legs.push(createLeg(2.0, -1, 0, 0, true)); // Mid Left
-  legs.push(createLeg(-2.0, -1, 0, 0, false)); // Mid Right
-  
-  // Hind Legs
-  legs.push(createLeg(1.5, -1, -3, -0.5, true)); // Hind Left
-  legs.push(createLeg(-1.5, -1, -3, 0.5, false)); // Hind Right
+  legs.push(createLeg(1.5, -1, 2.5, 0.5, true)); 
+  legs.push(createLeg(-1.5, -1, 2.5, -0.5, false)); 
+  legs.push(createLeg(2.0, -1, 0, 0, true)); 
+  legs.push(createLeg(-2.0, -1, 0, 0, false)); 
+  legs.push(createLeg(1.5, -1, -3, -0.5, true)); 
+  legs.push(createLeg(-1.5, -1, -3, 0.5, false)); 
 
   fly.userData = { leftWing, rightWing, headGroup, legs };
   fly.scale.set(2, 2, 2);
@@ -138,15 +123,15 @@ function createFly() {
 
 function createGlowTexture() {
   const canvas = document.createElement('canvas');
-  canvas.width = 32;
-  canvas.height = 32;
+  canvas.width = 16;
+  canvas.height = 16;
   const context = canvas.getContext('2d');
-  const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+  const gradient = context.createRadialGradient(8, 8, 0, 8, 8, 8);
   gradient.addColorStop(0, 'rgba(255,255,255,1)');
   gradient.addColorStop(0.3, 'rgba(255,255,255,0.8)');
   gradient.addColorStop(1, 'rgba(255,255,255,0)');
   context.fillStyle = gradient;
-  context.fillRect(0, 0, 32, 32);
+  context.fillRect(0, 0, 16, 16);
   return new THREE.CanvasTexture(canvas);
 }
 
@@ -184,7 +169,7 @@ const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
 worldScene.add(ground);
 
-// Generate Flowers and Fruits
+// Flora
 const floraGroup = new THREE.Group();
 const fruits = [];
 
@@ -221,13 +206,8 @@ function spawnFlower(x, z) {
   floraGroup.add(flower);
 }
 
-// Scatter Flora
-for(let i=0; i<100; i++) {
-  spawnFlower((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
-}
-for(let i=0; i<30; i++) {
-  spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
-}
+for(let i=0; i<100; i++) spawnFlower((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
+for(let i=0; i<30; i++) spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
 worldScene.add(floraGroup);
 
 // Add the single Agent Fly
@@ -257,12 +237,12 @@ const brainCamera = new THREE.OrthographicCamera(
 );
 brainCamera.position.set(0, 0, 1500);
 
-const brainRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const brainRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
 brainRenderer.setSize(bWidth, bHeight);
 brainRenderer.setPixelRatio(window.devicePixelRatio);
 brainContainer.appendChild(brainRenderer.domElement);
 
-let brainMaterial; 
+let activeNeurons = new Set();
 
 fetch('full_brain.json')
   .then(res => res.json())
@@ -271,6 +251,10 @@ fetch('full_brain.json')
 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(nodes.length * 3);
+    const colors = new Float32Array(nodes.length * 3);
+
+    // Initialize all to white (low alpha is handled by the material)
+    colors.fill(1.0);
 
     nodes.forEach((node, i) => {
       const idx = i * 3;
@@ -280,6 +264,7 @@ fetch('full_brain.json')
     });
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     geometry.computeBoundingBox();
     const center = new THREE.Vector3();
@@ -295,18 +280,21 @@ fetch('full_brain.json')
     brainCamera.bottom = (maxDim / -2) * 1.05;
     brainCamera.updateProjectionMatrix();
 
-    brainMaterial = new THREE.PointsMaterial({
-      color: 0xff0000,
-      size: 4,
+    const brainMaterial = new THREE.PointsMaterial({
+      vertexColors: true, // Optimised: We color per-vertex rather than the whole material
+      size: 3, // slightly smaller points for clarity
       map: createGlowTexture(),
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       transparent: true,
-      opacity: 0.15
+      opacity: 0.15 // Default to low alpha as requested
     });
 
     const brainPoints = new THREE.Points(geometry, brainMaterial);
     brainScene.add(brainPoints);
+    
+    brainScene.userData.brainGeo = geometry;
+    brainScene.userData.numNeurons = nodes.length;
   });
 
 
@@ -314,10 +302,8 @@ fetch('full_brain.json')
 // 3. ANIMATION & BEHAVIOR LOOP
 // ==========================================
 const clock = new THREE.Clock();
-
 const velocity = new THREE.Vector3(0, 0, 1);
 const speed = 80; 
-let sensorySpike = 0;
 let timeSinceEating = 100;
 
 function animate() {
@@ -345,15 +331,27 @@ function animate() {
     if (closestDist < 15) {
       floraGroup.remove(closestFruit);
       fruits.splice(closestIndex, 1);
-      sensorySpike = 1.0; 
       timeSinceEating = 0;
+      
+      // OPTIMIZED SENSORY SPIKE: Turn a localized random subset of neurons red
+      if (brainScene.userData.brainGeo) {
+        const colors = brainScene.userData.brainGeo.attributes.color.array;
+        const numN = brainScene.userData.numNeurons;
+        // 10,000 neurons fire at once
+        for (let k = 0; k < 10000; k++) {
+          const idx = Math.floor(Math.random() * numN);
+          activeNeurons.add(idx);
+          colors[idx * 3 + 0] = 1.0; // R
+          colors[idx * 3 + 1] = 0.0; // G
+          colors[idx * 3 + 2] = 0.0; // B
+        }
+        brainScene.userData.brainGeo.attributes.color.needsUpdate = true;
+      }
       
       spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
     } else {
-      // Locomotion: Steer towards the smell/vision source
+      // Locomotion
       const targetPos = closestFruit.position.clone();
-      
-      // Eratic movement
       targetPos.x += Math.sin(time * 5) * 50;
       targetPos.y += Math.cos(time * 4) * 30;
       
@@ -361,7 +359,6 @@ function animate() {
       velocity.lerp(desiredDir, dt * 2.0).normalize();
       
       agentFly.position.addScaledVector(velocity, speed * dt);
-      
       if (agentFly.position.y < 5) agentFly.position.y = 5;
       
       const lookTarget = agentFly.position.clone().add(velocity);
@@ -369,38 +366,26 @@ function animate() {
     }
   }
 
-  // --- KINEMATICS (Controlling Wings, Head, Legs) ---
-  
-  // Wings: flap rapidly
+  // --- KINEMATICS ---
   const flap = Math.sin(time * 60) * 0.6;
   agentFly.userData.leftWing.rotation.z = flap;
   agentFly.userData.rightWing.rotation.z = -flap;
   
-  // Head: Fly looks around erratically as it flies
   agentFly.userData.headGroup.rotation.y = Math.sin(time * 3) * 0.3;
   agentFly.userData.headGroup.rotation.z = Math.cos(time * 2.5) * 0.2;
   
-  // Legs: 
-  // Normally dangling slightly backwards from wind resistance.
-  // When eating (timeSinceEating < 1.0), the front legs "rub together" in a classic fly feeding motion!
   agentFly.userData.legs.forEach((leg, idx) => {
-    // Base swaying motion from flying
     let sway = Math.sin(time * 10 + idx) * 0.1;
     let kneeBend = leg.isLeft ? -1.0 : 1.0;
     
-    // Front legs (idx 0 and 1) perform rubbing action when eating
     if (timeSinceEating < 1.5 && idx < 2) {
       const rubSpeed = time * 30;
       sway += Math.sin(rubSpeed) * 0.4;
       kneeBend += Math.cos(rubSpeed) * 0.5;
-      
-      // Point front legs forward toward the mouth
       leg.root.rotation.x = -1.0;
     } else {
-      // Normal flight dangling
       leg.root.rotation.x = 0.5; 
     }
-    
     leg.root.rotation.z = (leg.isLeft ? (Math.PI / 4) : (-Math.PI / 4)) + sway;
     leg.knee.rotation.z = kneeBend + (sway * 0.5);
   });
@@ -408,15 +393,30 @@ function animate() {
   worldControls.update();
   worldRenderer.render(worldScene, worldCamera);
 
-  // --- BRAIN VISUALIZATION UPDATE ---
-  if (brainMaterial) {
-    if (sensorySpike > 0) {
-      brainMaterial.color.setRGB(1, sensorySpike, sensorySpike); 
-      brainMaterial.opacity = 0.15 + (sensorySpike * 0.5);
-      sensorySpike -= dt * 2.0;
-    } else {
-      brainMaterial.color.setHex(0xff0000);
-      brainMaterial.opacity = 0.15;
+  // --- OPTIMIZED BRAIN VISUALIZATION DECAY ---
+  // Only iterate through the specific neurons that are currently red to fade them back to white
+  if (activeNeurons.size > 0 && brainScene.userData.brainGeo) {
+    const colors = brainScene.userData.brainGeo.attributes.color.array;
+    let needsColorUpdate = false;
+    
+    for (let idx of activeNeurons) {
+      let g = colors[idx * 3 + 1];
+      if (g < 1.0) {
+        g += dt * 0.8; // Fading speed
+        if (g > 1.0) g = 1.0;
+        
+        // As G and B approach 1.0, the red fades back into pure white
+        colors[idx * 3 + 1] = g;
+        colors[idx * 3 + 2] = g;
+        needsColorUpdate = true;
+      } else {
+        // This neuron has successfully returned to pure white, remove from update list to save CPU
+        activeNeurons.delete(idx);
+      }
+    }
+    
+    if (needsColorUpdate) {
+      brainScene.userData.brainGeo.attributes.color.needsUpdate = true;
     }
   }
 
