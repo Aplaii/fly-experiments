@@ -1,0 +1,21 @@
+{
+  "name": "fly-connectome-vis",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "3d-force-graph": "^1.80.0",
+    "d3-dsv": "^3.0.1",
+    "d3-force-3d": "^3.0.6",
+    "d3-octree": "^1.1.0",
+    "three": "^0.186.0"
+  }
+}
