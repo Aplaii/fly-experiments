@@ -105,7 +105,7 @@ brainControls.dampingFactor = 0.05;
 fetch('full_brain.json')
   .then(res => res.json())
   .then(nodes => {
-    document.getElementById('stats').innerText = \`Loaded \${nodes.length.toLocaleString()} neurons in preview.\`;
+    document.getElementById('stats').innerText = `Loaded ${nodes.length.toLocaleString()} neurons in preview.`;
 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(nodes.length * 3);
