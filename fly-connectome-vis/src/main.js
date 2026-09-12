@@ -5,8 +5,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // Setup basic UI
 document.querySelector('#app').innerHTML = `
   <div id="ui-layer">
-    <h1>Living Fly Brain Simulation</h1>
-    <p>141,781 Neurons Rendering in Real-Time</p>
+    <h1>Fly Brain Connectome Preview</h1>
+    <p>Orthographic 2D Blueprint (Color-Coded by Neuron Type)</p>
     <div id="stats">Initializing world...</div>
   </div>
 `;
@@ -92,10 +92,15 @@ fetch('full_brain.json')
       originalPositions[idx + 1] = positions[idx + 1];
       originalPositions[idx + 2] = positions[idx + 2];
 
-      // Procedural color based on region/type
+      // Procedural color based on neuron type
       const color = new THREE.Color();
-      // Use coordinates to generate a gradient color (front-to-back, left-to-right)
-      color.setHSL((node.x / 1000) + 0.5, 0.8, 0.6);
+      let hash = 0;
+      const typeStr = node.type || "Unknown";
+      for (let j = 0; j < typeStr.length; j++) {
+        hash = typeStr.charCodeAt(j) + ((hash << 5) - hash);
+      }
+      const hue = Math.abs(hash % 360) / 360;
+      color.setHSL(hue, 0.8, 0.6);
       colors[idx] = color.r;
       colors[idx + 1] = color.g;
       colors[idx + 2] = color.b;
@@ -129,33 +134,8 @@ function animate() {
 
   // Animate the brain if it's loaded
   if (brainPoints) {
-    // 1. Brain slowly floats/bobs in the world
-    brainPoints.position.y = Math.sin(time * 0.5) * 50;
-    
-    // 2. Fly evolves / swims through space
-    brainPoints.position.z = Math.sin(time * 0.2) * 200;
-    
-    // 3. Brain rotates slightly
-    brainPoints.rotation.y = Math.sin(time * 0.1) * 0.2;
-    brainPoints.rotation.x = Math.cos(time * 0.15) * 0.1;
-
-    // 4. Brain pulsing effect (Neurons firing / breathing)
-    const positions = brainPoints.geometry.attributes.position.array;
-    for (let i = 0; i < positions.length; i += 3) {
-      // Pulse outward from center based on a sine wave
-      const x = originalPositions[i];
-      const y = originalPositions[i + 1];
-      const z = originalPositions[i + 2];
-      
-      const dist = Math.sqrt(x*x + y*y + z*z);
-      // Creates a wave that travels through the brain
-      const pulse = 1 + Math.sin(dist * 0.01 - time * 5) * 0.05;
-      
-      positions[i] = x * pulse;
-      positions[i + 1] = y * pulse;
-      positions[i + 2] = z * pulse;
-    }
-    brainPoints.geometry.attributes.position.needsUpdate = true;
+    // Keep it entirely static and unrotated for the preview
+    // We only update controls so the user can manually pan/zoom
   }
 
   controls.update();
