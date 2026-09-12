@@ -221,6 +221,22 @@ fetch('full_brain.json')
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
+    // Automatically center the brain geometry
+    geometry.computeBoundingBox();
+    const center = new THREE.Vector3();
+    geometry.boundingBox.getCenter(center);
+    geometry.translate(-center.x, -center.y, -center.z);
+
+    // Automatically scale the camera frustum to fit the whole brain perfectly (with 5% padding)
+    const size = new THREE.Vector3();
+    geometry.boundingBox.getSize(size);
+    const maxDim = Math.max(size.x, size.y);
+    brainCamera.left = (maxDim / -2) * 1.05;
+    brainCamera.right = (maxDim / 2) * 1.05;
+    brainCamera.top = (maxDim / 2) * 1.05;
+    brainCamera.bottom = (maxDim / -2) * 1.05;
+    brainCamera.updateProjectionMatrix();
+
     // Solid red color for all neurons/synapses
     brainMaterial = new THREE.PointsMaterial({
       color: 0xff0000,
