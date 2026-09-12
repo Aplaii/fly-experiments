@@ -33,7 +33,9 @@ def run_generation(population, env, steps=100):
     
     # Keep the top performer (Elitism)
     best_brain = population[best_agent_idx].brain
-    elite_brain = FlyBrain(connectome_path="initial_connectome.pt")
+    device = best_brain.device
+    
+    elite_brain = FlyBrain(connectome_path="initial_connectome.pt", device=device)
     elite_brain.load_state_dict(best_brain.state_dict())
     elite_agent = FlyAgent(elite_brain)
     new_population.append(elite_agent)
@@ -44,7 +46,7 @@ def run_generation(population, env, steps=100):
         parent_idx = ranked_indices[i % max(1, len(population) // 10)]
         parent_brain = population[parent_idx].brain
         
-        child_brain = FlyBrain(connectome_path="initial_connectome.pt")
+        child_brain = FlyBrain(connectome_path="initial_connectome.pt", device=device)
         child_brain.load_state_dict(parent_brain.state_dict())
         child_brain.mutate(mutation_rate=0.01, mutation_scale=0.05)
         

@@ -10,12 +10,15 @@ def main(args):
     print("Initialize Environment...")
     env = Environment()
     
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Loading Neural Network into: {device.upper()} VRAM")
+    
     print("Loading Baseline Fly Brain Connectome...")
-    base_brain = FlyBrain(connectome_path="initial_connectome.pt")
+    base_brain = FlyBrain(connectome_path="initial_connectome.pt", device=device)
     
     population_size = args.pop_size
     print(f"Spawning population of {population_size} agents...")
-    population = [FlyAgent(FlyBrain(connectome_path="initial_connectome.pt")) for _ in range(population_size)]
+    population = [FlyAgent(FlyBrain(connectome_path="initial_connectome.pt", device=device)) for _ in range(population_size)]
     
     generations = args.generations
     

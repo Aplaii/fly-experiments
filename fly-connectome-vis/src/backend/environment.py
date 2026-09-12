@@ -40,7 +40,7 @@ class FlyAgent:
         # We broadcast this simple stress signal across all sensory inputs for this minimal implementation
         import torch
         # A biological model would map specific sensors to specific temp gradients
-        sensory_input = torch.full((len(self.brain.sensory_indices),), thermal_stress, dtype=torch.float32)
+        sensory_input = torch.full((len(self.brain.sensory_indices),), thermal_stress, dtype=torch.float32, device=self.brain.device)
         
         # 2. Brain Forward Pass
         motor_out = self.brain(sensory_input)
