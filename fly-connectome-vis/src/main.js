@@ -312,33 +312,47 @@ function animate() {
   const time = clock.getElapsedTime();
   timeSinceEating += dt;
 
-  // --- SENSORY-MOTOR LOOP (Vision/Smell & Locomotion) ---
-  if (fruits.length > 0) {
-    let closestDist = Infinity;
-    let closestFruit = null;
-    let closestIndex = -1;
-    
-    fruits.forEach((fruit, idx) => {
-      const dist = agentFly.position.distanceTo(fruit.position);
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestFruit = fruit;
-        closestIndex = idx;
-      }
-    });
+  // --- SENSORY (Vision/Smell) & FREE LOCOMOTION ---
+  // The fly is no longer forced to seek or eat. It wanders freely (no interference).
+  
+  // 1. Free, natural wandering flight
+  velocity.x += Math.sin(time * 1.5) * dt * 2.0;
+  velocity.y += Math.cos(time * 1.1) * dt * 1.0;
+  velocity.z += Math.cos(time * 1.3) * dt * 2.0;
+  
+  // Gentle boundary steering so it doesn't fly infinitely into the void
+  if (agentFly.position.length() > 800) {
+    const centerDir = new THREE.Vector3(0, 50, 0).sub(agentFly.position).normalize();
+    velocity.lerp(centerDir, dt * 1.0);
+  }
+  
+  velocity.normalize();
+  agentFly.position.addScaledVector(velocity, speed * dt);
+  if (agentFly.position.y < 5) agentFly.position.y = 5; // ground collision
+  
+  const lookTarget = agentFly.position.clone().add(velocity);
+  agentFly.lookAt(lookTarget);
 
-    // Touch/Taste: Eat the fruit if very close
-    if (closestDist < 15) {
-      floraGroup.remove(closestFruit);
-      fruits.splice(closestIndex, 1);
-      timeSinceEating = 0;
-      
-      // OPTIMIZED SENSORY SPIKE: Turn a localized random subset of neurons red
+  // 2. Passive Sensory Input (Brain fires naturally based on what it sees/smells)
+  let closestDist = Infinity;
+  fruits.forEach(fruit => {
+    const dist = agentFly.position.distanceTo(fruit.position);
+    if (dist < closestDist) closestDist = dist;
+  });
+
+  // If a fruit is within 150 units, the fly's visual/olfactory neurons fire passively.
+  if (closestDist < 150) {
+    // The closer the fruit, the more intense the sensory spike
+    const intensity = 1.0 - (closestDist / 150.0);
+    
+    // Probability of a localized neural spike increases as it gets closer
+    if (Math.random() < (intensity * 0.2)) {
       if (brainScene.userData.brainGeo) {
         const colors = brainScene.userData.brainGeo.attributes.color.array;
         const numN = brainScene.userData.numNeurons;
-        // 10,000 neurons fire at once
-        for (let k = 0; k < 10000; k++) {
+        // 500 to 2000 neurons fire depending on intensity
+        const spikeCount = Math.floor(500 + (1500 * intensity));
+        for (let k = 0; k < spikeCount; k++) {
           const idx = Math.floor(Math.random() * numN);
           activeNeurons.add(idx);
           colors[idx * 3 + 0] = 1.0; // R
@@ -347,22 +361,6 @@ function animate() {
         }
         brainScene.userData.brainGeo.attributes.color.needsUpdate = true;
       }
-      
-      spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
-    } else {
-      // Locomotion
-      const targetPos = closestFruit.position.clone();
-      targetPos.x += Math.sin(time * 5) * 50;
-      targetPos.y += Math.cos(time * 4) * 30;
-      
-      const desiredDir = targetPos.sub(agentFly.position).normalize();
-      velocity.lerp(desiredDir, dt * 2.0).normalize();
-      
-      agentFly.position.addScaledVector(velocity, speed * dt);
-      if (agentFly.position.y < 5) agentFly.position.y = 5;
-      
-      const lookTarget = agentFly.position.clone().add(velocity);
-      agentFly.lookAt(lookTarget);
     }
   }
 
