@@ -340,28 +340,37 @@ function animate() {
     if (dist < closestDist) closestDist = dist;
   });
 
-  // If a fruit is within 150 units, the fly's visual/olfactory neurons fire passively.
-  if (closestDist < 150) {
-    // The closer the fruit, the more intense the sensory spike
-    const intensity = 1.0 - (closestDist / 150.0);
+  // BASELINE ACTIVITY: The brain is never silent! Constant low-level firing representing motor/thought
+  if (brainScene.userData.brainGeo) {
+    const colors = brainScene.userData.brainGeo.attributes.color.array;
+    const numN = brainScene.userData.numNeurons;
     
-    // Probability of a localized neural spike increases as it gets closer
-    if (Math.random() < (intensity * 0.2)) {
-      if (brainScene.userData.brainGeo) {
-        const colors = brainScene.userData.brainGeo.attributes.color.array;
-        const numN = brainScene.userData.numNeurons;
-        // 500 to 2000 neurons fire depending on intensity
-        const spikeCount = Math.floor(500 + (1500 * intensity));
+    // Constant random firing of ~100 neurons per frame
+    for (let k = 0; k < 100; k++) {
+      const idx = Math.floor(Math.random() * numN);
+      activeNeurons.add(idx);
+      colors[idx * 3 + 0] = 1.0; 
+      colors[idx * 3 + 1] = 0.5; // Baseline fires slightly pink/orange
+      colors[idx * 3 + 2] = 0.5;
+    }
+    
+    // SENSORY SPIKES: If a fruit is within 800 units (vision/smell range)
+    if (closestDist < 800) {
+      const intensity = 1.0 - (closestDist / 800.0);
+      
+      // Constant active sensory processing
+      if (Math.random() < (intensity * 0.8)) {
+        const spikeCount = Math.floor(1000 + (3000 * intensity));
         for (let k = 0; k < spikeCount; k++) {
           const idx = Math.floor(Math.random() * numN);
           activeNeurons.add(idx);
-          colors[idx * 3 + 0] = 1.0; // R
-          colors[idx * 3 + 1] = 0.0; // G
-          colors[idx * 3 + 2] = 0.0; // B
+          colors[idx * 3 + 0] = 1.0; // Sensory fires bright red
+          colors[idx * 3 + 1] = 0.0;
+          colors[idx * 3 + 2] = 0.0;
         }
-        brainScene.userData.brainGeo.attributes.color.needsUpdate = true;
       }
     }
+    brainScene.userData.brainGeo.attributes.color.needsUpdate = true;
   }
 
   // --- KINEMATICS ---
