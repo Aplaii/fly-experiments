@@ -152,8 +152,8 @@ async def brain_loop(websocket):
         print("Environment Disconnected. Brain powering down.")
 
 async def main():
-    print("Starting Biologically Accurate Conscience Server on ws://localhost:8766")
-    async with websockets.serve(brain_loop, "localhost", 8766):
+    print("Starting Biologically Accurate Conscience Server on ws://localhost:8767")
+    async with websockets.serve(brain_loop, "localhost", 8767):
         await asyncio.Future()  # run forever
 
 if __name__ == "__main__":
