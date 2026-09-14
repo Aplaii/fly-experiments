@@ -456,12 +456,31 @@ function animate() {
   if (agentFly.position.y > 100) agentFly.position.y = 100; // Ceiling
   if (agentFly.position.length() > 2000) agentFly.position.set(0, 50, 0); // Boundary loop
   
-  // Update UI Stats with Hormones
+  // Update UI Stats with Hormones and Neural Decoder
   if (ws.readyState === WebSocket.OPEN) {
       const s = Math.round(biologicalState.hormones.serotonin * 100);
       const o = Math.round(biologicalState.hormones.octopamine * 100);
       const d = Math.round(biologicalState.hormones.dopamine * 100);
-      document.getElementById('stats').innerText = `BIOLOGICAL UPLOAD | Serotonin (Satiety): ${s}% | Octopamine (Arousal): ${o}% | Dopamine (Reward): ${d}%`;
+      let statText = `BIOLOGICAL UPLOAD | Serotonin (Satiety): ${s}% | Octopamine (Arousal): ${o}% | Dopamine (Reward): ${d}%`;
+      
+      const decoder = biologicalState.decoder;
+      if (decoder && decoder.liked_item) {
+          // NEURAL DECODER ACTIVATED! 
+          // The brain has spiked in dopamine. We reproduce what it likes!
+          statText += `\n[NEURAL DECODER] Pleasure Center Detected! Neurons ${decoder.pleasure_neurons.join(', ')} firing at max rate. Fly loves ${decoder.liked_item}! Reproducing...`;
+          
+          // Only trigger spawn if it's the exact frame the item was consumed to prevent infinite loops
+          if (eatingType === decoder.liked_item) {
+              for (let i = 0; i < 5; i++) {
+                  // Spawn a cluster of 5 of the liked item around the fly to reward it!
+                  const rx = agentFly.position.x + (Math.random() - 0.5) * 500;
+                  const rz = agentFly.position.z + (Math.random() - 0.5) * 500;
+                  if (decoder.liked_item === 'sugar') spawnSugar(rx, rz);
+                  if (decoder.liked_item === 'fruit') spawnFruit(rx, rz);
+              }
+          }
+      }
+      document.getElementById('stats').innerText = statText;
   }
 
   // Flapping wings

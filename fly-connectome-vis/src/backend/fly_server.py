@@ -88,10 +88,17 @@ class BiologicalConscience:
         # Extract motor actions
         motor_out = firing_rates[self.motor_indices]
         
-        return motor_out, spike_list, self.serotonin, self.octopamine, self.dopamine
+        # NEURAL DECODER: Identify the "Pleasure Center"
+        # If dopamine is high, find the exact 5 neurons firing the absolute hardest
+        pleasure_neurons = []
+        if self.dopamine > 0.7:
+            top_firing = torch.topk(firing_rates, 5)
+            pleasure_neurons = top_firing.indices.tolist()
+            
+        return motor_out, spike_list, self.serotonin, self.octopamine, self.dopamine, pleasure_neurons
 
 async def brain_loop(websocket):
-    print("3D Environment Connected! Uploading Brain with Stereo Olfaction...")
+    print("3D Environment Connected! Uploading Brain with Stereo Olfaction & Neural Decoder...")
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     brain = BiologicalConscience(device=device)
     
@@ -108,14 +115,10 @@ async def brain_loop(websocket):
             
             # Step the biological brain (consciousness & emotions)
             with torch.no_grad():
-                motor_out, spikes, serotonin, octopamine, dopamine = brain.step(stimulus, eating_type)
+                motor_out, spikes, serotonin, octopamine, dopamine, pleasure_neurons = brain.step(stimulus, eating_type)
                 
             # --- PERIPHERAL NERVOUS SYSTEM (Chemotaxis Reflex) ---
-            # The raw brain outputs chaotic noise because it isn't mapped to a real body.
-            # We combine the brain's chaotic "will" with a biological steering reflex.
-            # If left smells stronger (distance is lower), steer left (positive yaw).
             smell_diff = smell_R - smell_L 
-            # Amplify the reflex based on how hungry (low serotonin) and aroused the fly is
             reflex_sensitivity = 0.05 + ((1.0 - serotonin) * 0.1) + (octopamine * 0.05)
             reflex_yaw = smell_diff * reflex_sensitivity
             
@@ -127,11 +130,8 @@ async def brain_loop(websocket):
             brain_dz = float(motor_out[chunk*2:chunk*3].mean()) * 0.01
             brain_yaw = float(motor_out[chunk*3:].mean()) * 0.01
             
-            # Final Kinematics: 
-            # 1. Constant forward thrust (flies naturally move forward to fly)
-            # 2. Reflex steering towards food
-            # 3. Chaotic brain noise (erratic flight patterns / exploration)
-            forward_thrust = 40.0 + (octopamine * 20.0) # Fly faster when aroused/scared
+            # Final Kinematics
+            forward_thrust = 40.0 + (octopamine * 20.0)
             
             response = {
                 'kinematics': {
@@ -141,7 +141,11 @@ async def brain_loop(websocket):
                     'yaw': reflex_yaw + brain_yaw
                 },
                 'spikes': spikes,
-                'hormones': {'serotonin': serotonin, 'octopamine': octopamine, 'dopamine': dopamine}
+                'hormones': {'serotonin': serotonin, 'octopamine': octopamine, 'dopamine': dopamine},
+                'decoder': {
+                    'liked_item': eating_type if dopamine > 0.7 else None,
+                    'pleasure_neurons': pleasure_neurons
+                }
             }
             await websocket.send(json.dumps(response))
     except websockets.exceptions.ConnectionClosed:
