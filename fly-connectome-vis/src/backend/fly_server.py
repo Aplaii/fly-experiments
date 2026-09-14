@@ -108,9 +108,10 @@ async def brain_loop(websocket):
         async for message in websocket:
             data = json.loads(message)
             closest_dist = data.get('closestDist', 1000)
-            smell_L = data.get('smell_L', 1000)
-            smell_R = data.get('smell_R', 1000)
+            smell_L = data.get('smell_L', 0.0) # Intensity
+            smell_R = data.get('smell_R', 0.0) # Intensity
             obstacle_L = data.get('obstacle_L', 1000)
+            obstacle_C = data.get('obstacle_C', 1000)
             obstacle_R = data.get('obstacle_R', 1000)
             eating_type = data.get('eating', None)
             
@@ -123,18 +124,32 @@ async def brain_loop(websocket):
                 
             # --- PERIPHERAL NERVOUS SYSTEM (Chemotaxis & Obstacle Reflex) ---
             # 1. Smell Reflex
-            smell_diff = smell_R - smell_L 
-            reflex_sensitivity = 0.05 + ((1.0 - serotonin) * 0.1) + (octopamine * 0.05)
+            # If left intensity is higher, turn left (positive yaw)
+            smell_diff = smell_L - smell_R 
+            reflex_sensitivity = 0.5 + ((1.0 - serotonin) * 1.0) + (octopamine * 0.5)
             reflex_yaw = smell_diff * reflex_sensitivity
+            # Cap the smell steering
+            reflex_yaw = max(-3.0, min(3.0, reflex_yaw))
             
             # 2. Obstacle Avoidance (Overrides smell if too close to a wall!)
             avoidance_yaw = 0.0
-            if obstacle_L < 80: 
-                avoidance_yaw -= (80 - obstacle_L) * 0.1 # Hard right turn
-                octopamine = min(1.0, octopamine + 0.1) # Fear spike!
-            if obstacle_R < 80:
-                avoidance_yaw += (80 - obstacle_R) * 0.1 # Hard left turn
-                octopamine = min(1.0, octopamine + 0.1) # Fear spike!
+            fear_spike = 0.0
+            
+            if obstacle_C < 100:
+                # If head-on, randomly pick a direction based on brain noise to break symmetry
+                avoidance_yaw += 5.0 if float(motor_out[0].item()) > 0 else -5.0
+                fear_spike = 0.5
+                
+            if obstacle_L < 100: 
+                avoidance_yaw -= (100 - obstacle_L) * 0.15 # Hard right turn
+                fear_spike = 0.2
+                
+            if obstacle_R < 100:
+                avoidance_yaw += (100 - obstacle_R) * 0.15 # Hard left turn
+                fear_spike = 0.2
+                
+            if fear_spike > 0:
+                octopamine = min(1.0, octopamine + fear_spike) # Fear spike!
                 
             final_yaw = reflex_yaw + avoidance_yaw
             
@@ -144,13 +159,13 @@ async def brain_loop(websocket):
             brain_dx = float(motor_out[0:chunk].mean()) * 0.01
             brain_dy = float(motor_out[chunk:chunk*2].mean()) * 0.01
             brain_dz = float(motor_out[chunk*2:chunk*3].mean()) * 0.01
-            brain_yaw = float(motor_out[chunk*3:].mean()) * 0.01
+            brain_yaw = float(motor_out[chunk*3:].mean()) * 0.05 # Increased brain influence
             
             # Final Kinematics
             # If avoiding, slow down slightly, otherwise arousal dictates speed
-            forward_thrust = 40.0 + (octopamine * 20.0)
+            forward_thrust = 40.0 + (octopamine * 30.0)
             if abs(avoidance_yaw) > 0:
-                forward_thrust *= 0.5 
+                forward_thrust *= 0.3 
             
             response = {
                 'kinematics': {

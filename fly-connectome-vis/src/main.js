@@ -421,66 +421,47 @@ function animate() {
   
   // Whiskers (Raycasters for the Maze)
   const dirL = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).applyAxisAngle(new THREE.Vector3(0,1,0), Math.PI/4).normalize();
+  const dirC = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).normalize();
   const dirR = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).applyAxisAngle(new THREE.Vector3(0,1,0), -Math.PI/4).normalize();
   
   raycasterL.set(agentFly.position, dirL);
+  const raycasterC = new THREE.Raycaster(agentFly.position, dirC);
   raycasterR.set(agentFly.position, dirR);
   
   const intersectsL = raycasterL.intersectObjects(collidables);
+  const intersectsC = raycasterC.intersectObjects(collidables);
   const intersectsR = raycasterR.intersectObjects(collidables);
   
   const obstacle_L = intersectsL.length > 0 ? intersectsL[0].distance : 1000;
+  const obstacle_C = intersectsC.length > 0 ? intersectsC[0].distance : 1000;
   const obstacle_R = intersectsR.length > 0 ? intersectsR[0].distance : 1000;
 
   let closestDist = Infinity;
-  let smell_L = Infinity;
-  let smell_R = Infinity;
+  let smell_L = 0; // Now represents scent intensity
+  let smell_R = 0; 
   
   let closestItem = null;
   let closestIndex = -1;
   let itemType = null;
   
-  // Check fruits
-  fruits.forEach((fruit, idx) => {
-    const dist = agentFly.position.distanceTo(fruit.position);
+  function processScent(item, idx, type) {
+    const dist = agentFly.position.distanceTo(item.position);
     if (dist < closestDist) {
       closestDist = dist;
-      closestItem = fruit;
+      closestItem = item;
       closestIndex = idx;
-      itemType = 'fruit';
+      itemType = type;
     }
-    const dL = leftAntenna.distanceTo(fruit.position);
-    const dR = rightAntenna.distanceTo(fruit.position);
-    if (dL < smell_L) smell_L = dL;
-    if (dR < smell_R) smell_R = dR;
-  });
-  
-  // Check sugars
-  sugars.forEach((sugar, idx) => {
-    const dist = agentFly.position.distanceTo(sugar.position);
-    if (dist < closestDist) {
-      closestDist = dist;
-      closestItem = sugar;
-      closestIndex = idx;
-      itemType = 'sugar';
-    }
-    const dL = leftAntenna.distanceTo(sugar.position);
-    const dR = rightAntenna.distanceTo(sugar.position);
-    if (dL < smell_L) smell_L = dL;
-    if (dR < smell_R) smell_R = dR;
-  });
-  
-  // Check Toy
-  const toyDist = agentFly.position.distanceTo(toy.position);
-  if (toyDist < closestDist) {
-      closestDist = toyDist;
-      closestItem = toy;
-      itemType = 'toy';
+    const dL = leftAntenna.distanceTo(item.position);
+    const dR = rightAntenna.distanceTo(item.position);
+    // Inverse square law for smell intensity
+    smell_L += 1000.0 / (dL * dL + 1.0);
+    smell_R += 1000.0 / (dR * dR + 1.0);
   }
-  const tdL = leftAntenna.distanceTo(toy.position);
-  const tdR = rightAntenna.distanceTo(toy.position);
-  if (tdL < smell_L) smell_L = tdL;
-  if (tdR < smell_R) smell_R = tdR;
+
+  fruits.forEach((f, i) => processScent(f, i, 'fruit'));
+  sugars.forEach((s, i) => processScent(s, i, 'sugar'));
+  processScent(toy, -1, 'toy');
 
   let eatingType = null;
   // Touch/Taste (Distance < 15)
@@ -496,7 +477,6 @@ function animate() {
         sugars.splice(closestIndex, 1);
         spawnSugar((Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000);
     } else if (itemType === 'toy') {
-        // Just bounces away
         toy.position.x += (Math.random() - 0.5) * 100;
         toy.position.z += (Math.random() - 0.5) * 100;
     }
@@ -504,7 +484,7 @@ function animate() {
 
   // SEND ENVIRONMENT STATE TO BIOLOGICAL CONSCIENCE
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ closestDist, smell_L, smell_R, obstacle_L, obstacle_R, eating: eatingType }));
+    ws.send(JSON.stringify({ closestDist, smell_L, smell_R, obstacle_L, obstacle_C, obstacle_R, eating: eatingType }));
   }
 
   // --- KINEMATICS (DRIVEN BY PERIPHERAL NERVOUS SYSTEM & BRAIN) ---
@@ -516,7 +496,13 @@ function animate() {
   }
   
   // Apply biological forward thrust
-  const forwardThrust = motor.forward || 0;
+  let forwardThrust = motor.forward || 0;
+  
+  // Hard physical collision blocking (prevent clipping through walls)
+  if (obstacle_C < 10 || obstacle_L < 10 || obstacle_R < 10) {
+      forwardThrust = -20; // Bounce back!
+  }
+  
   const forwardVel = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).multiplyScalar(forwardThrust * dt);
   agentFly.position.add(forwardVel);
 
