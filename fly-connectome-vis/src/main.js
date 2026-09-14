@@ -308,7 +308,7 @@ const ws = new WebSocket('ws://localhost:8765');
 let biologicalState = {
   kinematics: { dx: 0, dy: 0, dz: 0, yaw: 0 },
   spikes: [],
-  emotions: { hunger: 0, arousal: 0 }
+  hormones: { serotonin: 0.5, octopamine: 0.0, dopamine: 0.0 }
 };
 
 ws.onopen = () => {
@@ -330,10 +330,10 @@ ws.onmessage = (event) => {
       }
     }
     
-    // Then set the spiking neurons to bright red/orange based on arousal
+    // Then set the spiking neurons to bright red/orange based on octopamine (arousal)
     const r = 1.0;
-    const g = 1.0 - biologicalState.emotions.arousal; // high arousal = red, low arousal = orange/yellow
-    const b = 0.0;
+    const g = 1.0 - biologicalState.hormones.octopamine; // high octopamine = red, low = orange/yellow
+    const b = biologicalState.hormones.dopamine; // dopamine adds blue/purple tint
     
     biologicalState.spikes.forEach(idx => {
       colors[idx * 3 + 0] = r;
@@ -346,6 +346,21 @@ ws.onmessage = (event) => {
 };
 
 let timeSinceEating = 100;
+const sugars = [];
+
+// Helper to spawn sugar cubes
+function spawnSugar(x, z) {
+  const geo = new THREE.BoxGeometry(4, 4, 4);
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 2, z);
+  mesh.castShadow = true;
+  floraGroup.add(mesh);
+  sugars.push(mesh);
+}
+// Initial sugar spawn
+for(let i=0; i<20; i++) spawnSugar((Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000);
+
 
 function animate() {
   requestAnimationFrame(animate);
@@ -355,38 +370,51 @@ function animate() {
 
   // --- ENVIRONMENT SENSING ---
   let closestDist = Infinity;
-  let closestFruit = null;
+  let closestItem = null;
   let closestIndex = -1;
+  let itemType = null;
+  
   fruits.forEach((fruit, idx) => {
     const dist = agentFly.position.distanceTo(fruit.position);
     if (dist < closestDist) {
       closestDist = dist;
-      closestFruit = fruit;
+      closestItem = fruit;
       closestIndex = idx;
+      itemType = 'fruit';
+    }
+  });
+  
+  sugars.forEach((sugar, idx) => {
+    const dist = agentFly.position.distanceTo(sugar.position);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestItem = sugar;
+      closestIndex = idx;
+      itemType = 'sugar';
     }
   });
 
-  let eating = false;
+  let eatingType = null;
   if (closestDist < 15) {
-    floraGroup.remove(closestFruit);
-    fruits.splice(closestIndex, 1);
-    eating = true;
+    floraGroup.remove(closestItem);
+    eatingType = itemType;
     timeSinceEating = 0;
-    spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
+    if (itemType === 'fruit') {
+        fruits.splice(closestIndex, 1);
+        spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
+    } else {
+        sugars.splice(closestIndex, 1);
+        spawnSugar((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
+    }
   }
 
   // SEND ENVIRONMENT STATE TO BRAIN
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ closestDist, eating }));
+    ws.send(JSON.stringify({ closestDist, eating: eatingType }));
   }
 
   // --- KINEMATICS (DRIVEN BY TRUE BIOLOGICAL MOTOR NEURONS) ---
-  // The python server sends the exact motor neuron firing rates.
-  // We translate that directly into positional acceleration.
   const motor = biologicalState.kinematics;
-  
-  // Update position based on biological motor outputs
-  // Add some slight wandering offset if motor outputs are perfectly symmetrical/zero
   const speedScale = 0.5;
   agentFly.position.x += motor.dx * speedScale;
   agentFly.position.y += motor.dy * speedScale;
@@ -399,11 +427,12 @@ function animate() {
   if (agentFly.position.y < 5) agentFly.position.y = 5; 
   if (agentFly.position.length() > 2000) agentFly.position.set(0,50,0); // boundary loop
   
-  // Update UI Stats with Emotions
+  // Update UI Stats with Hormones
   if (ws.readyState === WebSocket.OPEN) {
-      const h = Math.round(biologicalState.emotions.hunger * 100);
-      const a = Math.round(biologicalState.emotions.arousal * 100);
-      document.getElementById('stats').innerText = `Biological Conscience | Hunger: ${h}% | Arousal: ${a}% | Spikes: ${biologicalState.spikes.length}`;
+      const s = Math.round(biologicalState.hormones.serotonin * 100);
+      const o = Math.round(biologicalState.hormones.octopamine * 100);
+      const d = Math.round(biologicalState.hormones.dopamine * 100);
+      document.getElementById('stats').innerText = `BIOLOGICAL UPLOAD | Serotonin (Satiety): ${s}% | Octopamine (Arousal): ${o}% | Dopamine (Reward): ${d}%`;
   }
 
   // Flapping wings

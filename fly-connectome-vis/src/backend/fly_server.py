@@ -27,33 +27,41 @@ class BiologicalConscience:
         self.tau_m = 10.0
         self.dt = 1.0
         
-        # EMOTIONS (Neuromodulators like Dopamine/Octopamine)
-        self.hunger = 0.5
-        self.arousal = 0.0 # Fear / excitement
+        # HORMONES (Neuromodulators)
+        self.serotonin = 0.5 # Satiety / Mood (low = hungry, high = full)
+        self.octopamine = 0.0 # Arousal / Flight-or-Fight (adrenaline equivalent)
+        self.dopamine = 0.0 # Reward / Pleasure
         
-    def step(self, sensory_stimulus, eating):
-        # Update emotions
-        if eating:
-            self.hunger = max(0.0, self.hunger - 0.1)
-            self.arousal = max(0.0, self.arousal - 0.05) # Calms down when eating
+    def step(self, sensory_stimulus, eating_type):
+        # Update hormones based on environment
+        if eating_type == 'fruit':
+            self.serotonin = min(1.0, self.serotonin + 0.1)
+            self.octopamine = max(0.0, self.octopamine - 0.05)
+            self.dopamine = min(1.0, self.dopamine + 0.2)
+        elif eating_type == 'sugar':
+            # Sugar causes a massive dopamine spike!
+            self.serotonin = min(1.0, self.serotonin + 0.05)
+            self.octopamine = min(1.0, self.octopamine + 0.2) # Sugar rush!
+            self.dopamine = min(1.0, self.dopamine + 0.8)
         else:
-            self.hunger = min(1.0, self.hunger + 0.001) # Slowly gets hungry over time
+            self.serotonin = max(0.0, self.serotonin - 0.001) # Slowly gets hungry
+            self.dopamine = max(0.0, self.dopamine - 0.01) # Dopamine fades
             
-        # Arousal spikes if suddenly stimulated
+        # Octopamine (arousal) spikes if suddenly stimulated
         if sensory_stimulus > 0.5:
-            self.arousal = min(1.0, self.arousal + 0.05)
+            self.octopamine = min(1.0, self.octopamine + 0.05)
         else:
-            self.arousal = max(0.0, self.arousal - 0.01)
+            self.octopamine = max(0.0, self.octopamine - 0.01)
             
-        # Emotions physically alter brain chemistry parameters
-        # High hunger/arousal = lower firing threshold (makes the fly hypersensitive/agitated)
-        current_threshold = self.v_threshold - (self.hunger * 8.0) - (self.arousal * 5.0)
+        # Hormones physically alter brain chemistry parameters
+        # Low serotonin (hungry) & high octopamine (aroused) = lower firing threshold
+        hunger = 1.0 - self.serotonin
+        current_threshold = self.v_threshold - (hunger * 8.0) - (self.octopamine * 5.0) + (self.dopamine * 2.0)
         
         # Calculate firing rates
         firing_rates = torch.relu(self.v - current_threshold)
         
-        # Identify spiking neurons for the UI (we return indices where firing rate > 0)
-        # Limit to top 5000 spikes to prevent websocket payload from getting too huge
+        # Identify spiking neurons for the UI
         spikes = torch.nonzero(firing_rates).squeeze()
         if spikes.dim() == 0 and spikes.numel() > 0:
             spikes = spikes.unsqueeze(0)
@@ -64,26 +72,27 @@ class BiologicalConscience:
             spike_list = random.sample(spike_list, 5000)
             
         # Synaptic transmission (The native 23 million edge biological matrix)
-        synaptic_currents = torch.sparse.mv(self.W, firing_rates)
+        # FIX: PyTorch sparse-dense matrix vector multiplication is torch.mv
+        synaptic_currents = torch.mv(self.W, firing_rates)
         
         # Sensory injection
         sensory_currents = torch.zeros_like(self.v)
         sensory_currents[self.sensory_indices] = sensory_stimulus * 30.0 # Amplify input
         
-        # Baseline noise (ambient thought / consciousness)
-        noise = torch.randn_like(self.v) * (2.0 + self.arousal * 8.0)
+        # Baseline noise (ambient thought / consciousness) affected by Octopamine
+        noise = torch.randn_like(self.v) * (2.0 + self.octopamine * 8.0)
         
         # Membrane update (LIF differential equation)
         dv = (-(self.v - self.v_rest) + synaptic_currents + sensory_currents + noise) * (self.dt / self.tau_m)
         self.v += dv
         
-        # Normalize voltage to prevent explosion (biological refractory limits)
+        # Normalize voltage to prevent explosion
         self.v = torch.clamp(self.v, min=-90.0, max=50.0)
         
         # Extract motor actions
         motor_out = firing_rates[self.motor_indices]
         
-        return motor_out, spike_list, self.hunger, self.arousal
+        return motor_out, spike_list, self.serotonin, self.octopamine, self.dopamine
 
 async def brain_loop(websocket):
     print("3D Environment Connected! Uploading Brain...")
@@ -94,14 +103,14 @@ async def brain_loop(websocket):
         async for message in websocket:
             data = json.loads(message)
             closest_dist = data.get('closestDist', 1000)
-            is_eating = data.get('eating', False)
+            eating_type = data.get('eating', None) # 'fruit', 'sugar', or None
             
             # Convert physical distance to sensory stimulus (0.0 to 1.0)
             stimulus = max(0.0, 1.0 - (closest_dist / 800.0))
             
             # Step the biological brain
             with torch.no_grad():
-                motor_out, spikes, hunger, arousal = brain.step(stimulus, is_eating)
+                motor_out, spikes, serotonin, octopamine, dopamine = brain.step(stimulus, eating_type)
                 
             # Average out motor clusters for basic kinematics
             chunk = len(motor_out) // 4
@@ -117,7 +126,7 @@ async def brain_loop(websocket):
             response = {
                 'kinematics': {'dx': dx, 'dy': dy, 'dz': dz, 'yaw': yaw},
                 'spikes': spikes,
-                'emotions': {'hunger': hunger, 'arousal': arousal}
+                'hormones': {'serotonin': serotonin, 'octopamine': octopamine, 'dopamine': dopamine}
             }
             await websocket.send(json.dumps(response))
     except websockets.exceptions.ConnectionClosed:
