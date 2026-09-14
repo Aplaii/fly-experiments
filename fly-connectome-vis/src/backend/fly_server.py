@@ -43,6 +43,8 @@ class BiologicalConscience:
             self.serotonin = min(1.0, self.serotonin + 0.05)
             self.octopamine = min(1.0, self.octopamine + 0.2) # Sugar rush!
             self.dopamine = min(1.0, self.dopamine + 0.8)
+        elif eating_type == 'toy':
+            self.octopamine = min(1.0, self.octopamine + 0.6)
         else:
             self.serotonin = max(0.0, self.serotonin - 0.001) # Slowly gets hungry
             self.dopamine = max(0.0, self.dopamine - 0.01) # Dopamine fades
@@ -108,19 +110,33 @@ async def brain_loop(websocket):
             closest_dist = data.get('closestDist', 1000)
             smell_L = data.get('smell_L', 1000)
             smell_R = data.get('smell_R', 1000)
+            obstacle_L = data.get('obstacle_L', 1000)
+            obstacle_R = data.get('obstacle_R', 1000)
             eating_type = data.get('eating', None)
             
-            # Central stimulus (average smell)
+            # Central stimulus (average smell/proximity)
             stimulus = max(0.0, 1.0 - (closest_dist / 800.0))
             
             # Step the biological brain (consciousness & emotions)
             with torch.no_grad():
                 motor_out, spikes, serotonin, octopamine, dopamine, pleasure_neurons = brain.step(stimulus, eating_type)
                 
-            # --- PERIPHERAL NERVOUS SYSTEM (Chemotaxis Reflex) ---
+            # --- PERIPHERAL NERVOUS SYSTEM (Chemotaxis & Obstacle Reflex) ---
+            # 1. Smell Reflex
             smell_diff = smell_R - smell_L 
             reflex_sensitivity = 0.05 + ((1.0 - serotonin) * 0.1) + (octopamine * 0.05)
             reflex_yaw = smell_diff * reflex_sensitivity
+            
+            # 2. Obstacle Avoidance (Overrides smell if too close to a wall!)
+            avoidance_yaw = 0.0
+            if obstacle_L < 80: 
+                avoidance_yaw -= (80 - obstacle_L) * 0.1 # Hard right turn
+                octopamine = min(1.0, octopamine + 0.1) # Fear spike!
+            if obstacle_R < 80:
+                avoidance_yaw += (80 - obstacle_R) * 0.1 # Hard left turn
+                octopamine = min(1.0, octopamine + 0.1) # Fear spike!
+                
+            final_yaw = reflex_yaw + avoidance_yaw
             
             # Extract chaotic brain motor output
             chunk = len(motor_out) // 4
@@ -131,14 +147,17 @@ async def brain_loop(websocket):
             brain_yaw = float(motor_out[chunk*3:].mean()) * 0.01
             
             # Final Kinematics
+            # If avoiding, slow down slightly, otherwise arousal dictates speed
             forward_thrust = 40.0 + (octopamine * 20.0)
+            if abs(avoidance_yaw) > 0:
+                forward_thrust *= 0.5 
             
             response = {
                 'kinematics': {
                     'forward': forward_thrust + brain_dz,
                     'drift_x': brain_dx, 
                     'drift_y': brain_dy, 
-                    'yaw': reflex_yaw + brain_yaw
+                    'yaw': final_yaw + brain_yaw
                 },
                 'spikes': spikes,
                 'hormones': {'serotonin': serotonin, 'octopamine': octopamine, 'dopamine': dopamine},

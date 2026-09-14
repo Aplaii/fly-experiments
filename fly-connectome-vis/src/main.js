@@ -212,8 +212,55 @@ worldScene.add(floraGroup);
 
 // Add the single Agent Fly
 const agentFly = createFly();
-agentFly.position.set(0, 50, 0);
+agentFly.position.set(0, 50, 0); // Spawns outside the maze
 worldScene.add(agentFly);
+
+// ==========================================
+// 1.5 MAZE & TOYS (Cognitive Challenges)
+// ==========================================
+const collidables = [];
+
+function buildMaze() {
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+  const wallGeo = new THREE.BoxGeometry(100, 100, 10);
+  
+  // Create a simple spiral/box maze at the center
+  const walls = [
+    { x: 0, z: 200, w: 400, r: 0 }, // North wall
+    { x: 0, z: -200, w: 400, r: 0 }, // South wall
+    { x: 200, z: 0, w: 400, r: Math.PI/2 }, // East wall
+    { x: -200, z: 50, w: 300, r: Math.PI/2 }, // West wall (with gap)
+    { x: -100, z: 100, w: 200, r: 0 }, // Inner wall 1
+    { x: 100, z: -50, w: 300, r: Math.PI/2 }, // Inner wall 2
+    { x: 0, z: -100, w: 200, r: 0 }, // Inner wall 3
+  ];
+  
+  walls.forEach(w => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w.w, 100, 20), wallMat);
+    mesh.position.set(w.x, 50, w.z);
+    mesh.rotation.y = w.r;
+    mesh.castShadow = true;
+    worldScene.add(mesh);
+    collidables.push(mesh);
+  });
+  
+  // Put a massive cluster of sugar in the center of the maze!
+  for(let i=0; i<10; i++) {
+    spawnSugar((Math.random() - 0.5) * 50, (Math.random() - 0.5) * 50);
+  }
+}
+buildMaze();
+
+// Add a "Toy" (a shiny bouncy ball that attracts attention)
+const toyGeo = new THREE.SphereGeometry(15, 32, 32);
+const toyMat = new THREE.MeshPhysicalMaterial({ color: 0x00ffcc, metalness: 0.9, roughness: 0.1, clearcoat: 1.0 });
+const toy = new THREE.Mesh(toyGeo, toyMat);
+toy.position.set(300, 15, 300);
+worldScene.add(toy);
+
+// Raycasters for obstacle avoidance (Whiskers)
+const raycasterL = new THREE.Raycaster();
+const raycasterR = new THREE.Raycaster();
 
 
 // ==========================================
@@ -368,11 +415,26 @@ function animate() {
   const time = clock.getElapsedTime();
   timeSinceEating += dt;
 
-  // --- ENVIRONMENT SENSING (Stereo Olfaction) ---
-  // We place two invisible "antennae" on the fly to detect smell gradients
+  // Animate Toy
+  toy.position.y = 15 + Math.sin(time * 4) * 10;
+  
+  // --- ENVIRONMENT SENSING (Stereo Olfaction & Obstacles) ---
   const leftAntenna = agentFly.position.clone().add(new THREE.Vector3(-3, 0, 3).applyEuler(agentFly.rotation));
   const rightAntenna = agentFly.position.clone().add(new THREE.Vector3(3, 0, 3).applyEuler(agentFly.rotation));
   
+  // Whiskers (Raycasters for the Maze)
+  const dirL = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).applyAxisAngle(new THREE.Vector3(0,1,0), Math.PI/4).normalize();
+  const dirR = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).applyAxisAngle(new THREE.Vector3(0,1,0), -Math.PI/4).normalize();
+  
+  raycasterL.set(agentFly.position, dirL);
+  raycasterR.set(agentFly.position, dirR);
+  
+  const intersectsL = raycasterL.intersectObjects(collidables);
+  const intersectsR = raycasterR.intersectObjects(collidables);
+  
+  const obstacle_L = intersectsL.length > 0 ? intersectsL[0].distance : 1000;
+  const obstacle_R = intersectsR.length > 0 ? intersectsR[0].distance : 1000;
+
   let closestDist = Infinity;
   let smell_L = Infinity;
   let smell_R = Infinity;
@@ -410,25 +472,42 @@ function animate() {
     if (dL < smell_L) smell_L = dL;
     if (dR < smell_R) smell_R = dR;
   });
+  
+  // Check Toy
+  const toyDist = agentFly.position.distanceTo(toy.position);
+  if (toyDist < closestDist) {
+      closestDist = toyDist;
+      closestItem = toy;
+      itemType = 'toy';
+  }
+  const tdL = leftAntenna.distanceTo(toy.position);
+  const tdR = rightAntenna.distanceTo(toy.position);
+  if (tdL < smell_L) smell_L = tdL;
+  if (tdR < smell_R) smell_R = tdR;
 
   let eatingType = null;
   // Touch/Taste (Distance < 15)
   if (closestDist < 15) {
-    floraGroup.remove(closestItem);
-    eatingType = itemType;
     timeSinceEating = 0;
+    eatingType = itemType;
     if (itemType === 'fruit') {
+        floraGroup.remove(closestItem);
         fruits.splice(closestIndex, 1);
         spawnFruit((Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000);
-    } else {
+    } else if (itemType === 'sugar') {
+        floraGroup.remove(closestItem);
         sugars.splice(closestIndex, 1);
         spawnSugar((Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000);
+    } else if (itemType === 'toy') {
+        // Just bounces away
+        toy.position.x += (Math.random() - 0.5) * 100;
+        toy.position.z += (Math.random() - 0.5) * 100;
     }
   }
 
   // SEND ENVIRONMENT STATE TO BIOLOGICAL CONSCIENCE
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ closestDist, smell_L, smell_R, eating: eatingType }));
+    ws.send(JSON.stringify({ closestDist, smell_L, smell_R, obstacle_L, obstacle_R, eating: eatingType }));
   }
 
   // --- KINEMATICS (DRIVEN BY PERIPHERAL NERVOUS SYSTEM & BRAIN) ---
@@ -507,7 +586,19 @@ function animate() {
     leg.knee.rotation.z = kneeBend + (sway * 0.5);
   });
   
-  worldControls.update();
+  // Camera follow logic (Smooth trailing camera)
+  const idealOffset = new THREE.Vector3(0, 40, -100);
+  idealOffset.applyQuaternion(agentFly.quaternion);
+  idealOffset.add(agentFly.position);
+  
+  worldCamera.position.lerp(idealOffset, 0.1);
+  
+  const idealLookAt = agentFly.position.clone().add(new THREE.Vector3(0, 0, 50).applyQuaternion(agentFly.quaternion));
+  worldCamera.lookAt(idealLookAt);
+  
+  // Notice: orbit controls might fight with lookAt if not disabled. We can just leave orbitControls out of the render loop if following.
+  // worldControls.update(); // We disable orbit controls so it doesn't fight the follow camera.
+  
   worldRenderer.render(worldScene, worldCamera);
   brainRenderer.render(brainScene, brainCamera);
 }
