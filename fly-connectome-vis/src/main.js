@@ -172,6 +172,7 @@ worldScene.add(ground);
 // Flora
 const floraGroup = new THREE.Group();
 const fruits = [];
+const sugars = [];
 
 function spawnFruit(x, z) {
   const fruitGeo = new THREE.SphereGeometry(6, 16, 16);
@@ -180,6 +181,16 @@ function spawnFruit(x, z) {
   fruit.position.set(x, 6, z);
   floraGroup.add(fruit);
   fruits.push(fruit);
+}
+
+function spawnSugar(x, z) {
+  const geo = new THREE.BoxGeometry(4, 4, 4);
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 2, z);
+  mesh.castShadow = true;
+  floraGroup.add(mesh);
+  sugars.push(mesh);
 }
 
 function spawnFlower(x, z) {
@@ -208,6 +219,7 @@ function spawnFlower(x, z) {
 
 for(let i=0; i<100; i++) spawnFlower((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
 for(let i=0; i<30; i++) spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
+for(let i=0; i<20; i++) spawnSugar((Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000);
 worldScene.add(floraGroup);
 
 // Add the single Agent Fly
@@ -393,21 +405,6 @@ ws.onmessage = (event) => {
 };
 
 let timeSinceEating = 100;
-const sugars = [];
-
-// Helper to spawn sugar cubes
-function spawnSugar(x, z) {
-  const geo = new THREE.BoxGeometry(4, 4, 4);
-  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, 2, z);
-  mesh.castShadow = true;
-  floraGroup.add(mesh);
-  sugars.push(mesh);
-}
-// Initial sugar spawn
-for(let i=0; i<20; i++) spawnSugar((Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000);
-
 
 function animate() {
   requestAnimationFrame(animate);
