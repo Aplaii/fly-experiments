@@ -368,12 +368,20 @@ function animate() {
   const time = clock.getElapsedTime();
   timeSinceEating += dt;
 
-  // --- ENVIRONMENT SENSING ---
+  // --- ENVIRONMENT SENSING (Stereo Olfaction) ---
+  // We place two invisible "antennae" on the fly to detect smell gradients
+  const leftAntenna = agentFly.position.clone().add(new THREE.Vector3(-3, 0, 3).applyEuler(agentFly.rotation));
+  const rightAntenna = agentFly.position.clone().add(new THREE.Vector3(3, 0, 3).applyEuler(agentFly.rotation));
+  
   let closestDist = Infinity;
+  let smell_L = Infinity;
+  let smell_R = Infinity;
+  
   let closestItem = null;
   let closestIndex = -1;
   let itemType = null;
   
+  // Check fruits
   fruits.forEach((fruit, idx) => {
     const dist = agentFly.position.distanceTo(fruit.position);
     if (dist < closestDist) {
@@ -382,8 +390,13 @@ function animate() {
       closestIndex = idx;
       itemType = 'fruit';
     }
+    const dL = leftAntenna.distanceTo(fruit.position);
+    const dR = rightAntenna.distanceTo(fruit.position);
+    if (dL < smell_L) smell_L = dL;
+    if (dR < smell_R) smell_R = dR;
   });
   
+  // Check sugars
   sugars.forEach((sugar, idx) => {
     const dist = agentFly.position.distanceTo(sugar.position);
     if (dist < closestDist) {
@@ -392,40 +405,56 @@ function animate() {
       closestIndex = idx;
       itemType = 'sugar';
     }
+    const dL = leftAntenna.distanceTo(sugar.position);
+    const dR = rightAntenna.distanceTo(sugar.position);
+    if (dL < smell_L) smell_L = dL;
+    if (dR < smell_R) smell_R = dR;
   });
 
   let eatingType = null;
+  // Touch/Taste (Distance < 15)
   if (closestDist < 15) {
     floraGroup.remove(closestItem);
     eatingType = itemType;
     timeSinceEating = 0;
     if (itemType === 'fruit') {
         fruits.splice(closestIndex, 1);
-        spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
+        spawnFruit((Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000);
     } else {
         sugars.splice(closestIndex, 1);
-        spawnSugar((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
+        spawnSugar((Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000);
     }
   }
 
-  // SEND ENVIRONMENT STATE TO BRAIN
+  // SEND ENVIRONMENT STATE TO BIOLOGICAL CONSCIENCE
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ closestDist, eating: eatingType }));
+    ws.send(JSON.stringify({ closestDist, smell_L, smell_R, eating: eatingType }));
   }
 
-  // --- KINEMATICS (DRIVEN BY TRUE BIOLOGICAL MOTOR NEURONS) ---
+  // --- KINEMATICS (DRIVEN BY PERIPHERAL NERVOUS SYSTEM & BRAIN) ---
   const motor = biologicalState.kinematics;
-  const speedScale = 0.5;
-  agentFly.position.x += motor.dx * speedScale;
-  agentFly.position.y += motor.dy * speedScale;
-  agentFly.position.z += motor.dz * speedScale;
   
-  // The fly is naturally flying forward 
-  const forwardVel = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).multiplyScalar(40 * dt);
+  // Apply biological yaw (steering)
+  if (motor.yaw) {
+      agentFly.rotation.y += motor.yaw * dt;
+  }
+  
+  // Apply biological forward thrust
+  const forwardThrust = motor.forward || 0;
+  const forwardVel = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).multiplyScalar(forwardThrust * dt);
   agentFly.position.add(forwardVel);
 
+  // Apply biological chaotic drift (erratic flight from brain noise)
+  agentFly.position.x += (motor.drift_x || 0) * dt;
+  agentFly.position.y += (motor.drift_y || 0) * dt;
+
+  // Simulate Wind (pushes the fly slightly depending on altitude)
+  const windStrength = (agentFly.position.y / 100) * 5.0 * dt;
+  agentFly.position.x += windStrength;
+  
   if (agentFly.position.y < 5) agentFly.position.y = 5; 
-  if (agentFly.position.length() > 2000) agentFly.position.set(0,50,0); // boundary loop
+  if (agentFly.position.y > 100) agentFly.position.y = 100; // Ceiling
+  if (agentFly.position.length() > 2000) agentFly.position.set(0, 50, 0); // Boundary loop
   
   // Update UI Stats with Hormones
   if (ws.readyState === WebSocket.OPEN) {

@@ -71,22 +71,18 @@ class BiologicalConscience:
             import random
             spike_list = random.sample(spike_list, 5000)
             
-        # Synaptic transmission (The native 23 million edge biological matrix)
-        # FIX: PyTorch sparse-dense matrix vector multiplication is torch.mv
+        # Synaptic transmission
         synaptic_currents = torch.mv(self.W, firing_rates)
         
         # Sensory injection
         sensory_currents = torch.zeros_like(self.v)
-        sensory_currents[self.sensory_indices] = sensory_stimulus * 30.0 # Amplify input
+        sensory_currents[self.sensory_indices] = sensory_stimulus * 30.0
         
-        # Baseline noise (ambient thought / consciousness) affected by Octopamine
         noise = torch.randn_like(self.v) * (2.0 + self.octopamine * 8.0)
         
-        # Membrane update (LIF differential equation)
+        # Membrane update
         dv = (-(self.v - self.v_rest) + synaptic_currents + sensory_currents + noise) * (self.dt / self.tau_m)
         self.v += dv
-        
-        # Normalize voltage to prevent explosion
         self.v = torch.clamp(self.v, min=-90.0, max=50.0)
         
         # Extract motor actions
@@ -95,7 +91,7 @@ class BiologicalConscience:
         return motor_out, spike_list, self.serotonin, self.octopamine, self.dopamine
 
 async def brain_loop(websocket):
-    print("3D Environment Connected! Uploading Brain...")
+    print("3D Environment Connected! Uploading Brain with Stereo Olfaction...")
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     brain = BiologicalConscience(device=device)
     
@@ -103,28 +99,47 @@ async def brain_loop(websocket):
         async for message in websocket:
             data = json.loads(message)
             closest_dist = data.get('closestDist', 1000)
-            eating_type = data.get('eating', None) # 'fruit', 'sugar', or None
+            smell_L = data.get('smell_L', 1000)
+            smell_R = data.get('smell_R', 1000)
+            eating_type = data.get('eating', None)
             
-            # Convert physical distance to sensory stimulus (0.0 to 1.0)
+            # Central stimulus (average smell)
             stimulus = max(0.0, 1.0 - (closest_dist / 800.0))
             
-            # Step the biological brain
+            # Step the biological brain (consciousness & emotions)
             with torch.no_grad():
                 motor_out, spikes, serotonin, octopamine, dopamine = brain.step(stimulus, eating_type)
                 
-            # Average out motor clusters for basic kinematics
+            # --- PERIPHERAL NERVOUS SYSTEM (Chemotaxis Reflex) ---
+            # The raw brain outputs chaotic noise because it isn't mapped to a real body.
+            # We combine the brain's chaotic "will" with a biological steering reflex.
+            # If left smells stronger (distance is lower), steer left (positive yaw).
+            smell_diff = smell_R - smell_L 
+            # Amplify the reflex based on how hungry (low serotonin) and aroused the fly is
+            reflex_sensitivity = 0.05 + ((1.0 - serotonin) * 0.1) + (octopamine * 0.05)
+            reflex_yaw = smell_diff * reflex_sensitivity
+            
+            # Extract chaotic brain motor output
             chunk = len(motor_out) // 4
             if chunk == 0: chunk = 1
+            brain_dx = float(motor_out[0:chunk].mean()) * 0.01
+            brain_dy = float(motor_out[chunk:chunk*2].mean()) * 0.01
+            brain_dz = float(motor_out[chunk*2:chunk*3].mean()) * 0.01
+            brain_yaw = float(motor_out[chunk*3:].mean()) * 0.01
             
-            # True biological motor mappings
-            dx = float(motor_out[0:chunk].mean())
-            dy = float(motor_out[chunk:chunk*2].mean())
-            dz = float(motor_out[chunk*2:chunk*3].mean())
-            yaw = float(motor_out[chunk*3:].mean())
+            # Final Kinematics: 
+            # 1. Constant forward thrust (flies naturally move forward to fly)
+            # 2. Reflex steering towards food
+            # 3. Chaotic brain noise (erratic flight patterns / exploration)
+            forward_thrust = 40.0 + (octopamine * 20.0) # Fly faster when aroused/scared
             
-            # Send the biological truth back to the 3D environment
             response = {
-                'kinematics': {'dx': dx, 'dy': dy, 'dz': dz, 'yaw': yaw},
+                'kinematics': {
+                    'forward': forward_thrust + brain_dz,
+                    'drift_x': brain_dx, 
+                    'drift_y': brain_dy, 
+                    'yaw': reflex_yaw + brain_yaw
+                },
                 'spikes': spikes,
                 'hormones': {'serotonin': serotonin, 'octopamine': octopamine, 'dopamine': dopamine}
             }
