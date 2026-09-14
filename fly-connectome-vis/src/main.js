@@ -299,11 +299,52 @@ fetch('full_brain.json')
 
 
 // ==========================================
-// 3. ANIMATION & BEHAVIOR LOOP
+// 3. ANIMATION, BEHAVIOR & CONSCIENCE UPLOAD
 // ==========================================
 const clock = new THREE.Clock();
-const velocity = new THREE.Vector3(0, 0, 1);
-const speed = 80; 
+
+// Connect to the Python Biological Conscience
+const ws = new WebSocket('ws://localhost:8765');
+let biologicalState = {
+  kinematics: { dx: 0, dy: 0, dz: 0, yaw: 0 },
+  spikes: [],
+  emotions: { hunger: 0, arousal: 0 }
+};
+
+ws.onopen = () => {
+  document.getElementById('stats').innerText = `Brain Uploaded. Biological Conscience Online.`;
+};
+
+ws.onmessage = (event) => {
+  biologicalState = JSON.parse(event.data);
+  
+  // Directly map biological neural spikes to visual vertices
+  if (brainScene.userData.brainGeo) {
+    const colors = brainScene.userData.brainGeo.attributes.color.array;
+    
+    // First, gradually decay all neurons back to white
+    for (let i = 0; i < colors.length; i += 3) {
+      if (colors[i+1] < 1.0) {
+        colors[i+1] += 0.05;
+        colors[i+2] += 0.05;
+      }
+    }
+    
+    // Then set the spiking neurons to bright red/orange based on arousal
+    const r = 1.0;
+    const g = 1.0 - biologicalState.emotions.arousal; // high arousal = red, low arousal = orange/yellow
+    const b = 0.0;
+    
+    biologicalState.spikes.forEach(idx => {
+      colors[idx * 3 + 0] = r;
+      colors[idx * 3 + 1] = g;
+      colors[idx * 3 + 2] = b;
+    });
+    
+    brainScene.userData.brainGeo.attributes.color.needsUpdate = true;
+  }
+};
+
 let timeSinceEating = 100;
 
 function animate() {
@@ -312,74 +353,66 @@ function animate() {
   const time = clock.getElapsedTime();
   timeSinceEating += dt;
 
-  // --- SENSORY (Vision/Smell) & FREE LOCOMOTION ---
-  // The fly is no longer forced to seek or eat. It wanders freely (no interference).
-  
-  // 1. Free, natural wandering flight
-  velocity.x += Math.sin(time * 1.5) * dt * 2.0;
-  velocity.y += Math.cos(time * 1.1) * dt * 1.0;
-  velocity.z += Math.cos(time * 1.3) * dt * 2.0;
-  
-  // Gentle boundary steering so it doesn't fly infinitely into the void
-  if (agentFly.position.length() > 800) {
-    const centerDir = new THREE.Vector3(0, 50, 0).sub(agentFly.position).normalize();
-    velocity.lerp(centerDir, dt * 1.0);
-  }
-  
-  velocity.normalize();
-  agentFly.position.addScaledVector(velocity, speed * dt);
-  if (agentFly.position.y < 5) agentFly.position.y = 5; // ground collision
-  
-  const lookTarget = agentFly.position.clone().add(velocity);
-  agentFly.lookAt(lookTarget);
-
-  // 2. Passive Sensory Input (Brain fires naturally based on what it sees/smells)
+  // --- ENVIRONMENT SENSING ---
   let closestDist = Infinity;
-  fruits.forEach(fruit => {
+  let closestFruit = null;
+  let closestIndex = -1;
+  fruits.forEach((fruit, idx) => {
     const dist = agentFly.position.distanceTo(fruit.position);
-    if (dist < closestDist) closestDist = dist;
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestFruit = fruit;
+      closestIndex = idx;
+    }
   });
 
-  // BASELINE ACTIVITY: The brain is never silent! Constant low-level firing representing motor/thought
-  if (brainScene.userData.brainGeo) {
-    const colors = brainScene.userData.brainGeo.attributes.color.array;
-    const numN = brainScene.userData.numNeurons;
-    
-    // Constant random firing of ~100 neurons per frame
-    for (let k = 0; k < 100; k++) {
-      const idx = Math.floor(Math.random() * numN);
-      activeNeurons.add(idx);
-      colors[idx * 3 + 0] = 1.0; 
-      colors[idx * 3 + 1] = 0.5; // Baseline fires slightly pink/orange
-      colors[idx * 3 + 2] = 0.5;
-    }
-    
-    // SENSORY SPIKES: If a fruit is within 800 units (vision/smell range)
-    if (closestDist < 800) {
-      const intensity = 1.0 - (closestDist / 800.0);
-      
-      // Constant active sensory processing
-      if (Math.random() < (intensity * 0.8)) {
-        const spikeCount = Math.floor(1000 + (3000 * intensity));
-        for (let k = 0; k < spikeCount; k++) {
-          const idx = Math.floor(Math.random() * numN);
-          activeNeurons.add(idx);
-          colors[idx * 3 + 0] = 1.0; // Sensory fires bright red
-          colors[idx * 3 + 1] = 0.0;
-          colors[idx * 3 + 2] = 0.0;
-        }
-      }
-    }
-    brainScene.userData.brainGeo.attributes.color.needsUpdate = true;
+  let eating = false;
+  if (closestDist < 15) {
+    floraGroup.remove(closestFruit);
+    fruits.splice(closestIndex, 1);
+    eating = true;
+    timeSinceEating = 0;
+    spawnFruit((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
   }
 
-  // --- KINEMATICS ---
+  // SEND ENVIRONMENT STATE TO BRAIN
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ closestDist, eating }));
+  }
+
+  // --- KINEMATICS (DRIVEN BY TRUE BIOLOGICAL MOTOR NEURONS) ---
+  // The python server sends the exact motor neuron firing rates.
+  // We translate that directly into positional acceleration.
+  const motor = biologicalState.kinematics;
+  
+  // Update position based on biological motor outputs
+  // Add some slight wandering offset if motor outputs are perfectly symmetrical/zero
+  const speedScale = 0.5;
+  agentFly.position.x += motor.dx * speedScale;
+  agentFly.position.y += motor.dy * speedScale;
+  agentFly.position.z += motor.dz * speedScale;
+  
+  // The fly is naturally flying forward 
+  const forwardVel = new THREE.Vector3(0, 0, 1).applyEuler(agentFly.rotation).multiplyScalar(40 * dt);
+  agentFly.position.add(forwardVel);
+
+  if (agentFly.position.y < 5) agentFly.position.y = 5; 
+  if (agentFly.position.length() > 2000) agentFly.position.set(0,50,0); // boundary loop
+  
+  // Update UI Stats with Emotions
+  if (ws.readyState === WebSocket.OPEN) {
+      const h = Math.round(biologicalState.emotions.hunger * 100);
+      const a = Math.round(biologicalState.emotions.arousal * 100);
+      document.getElementById('stats').innerText = `Biological Conscience | Hunger: ${h}% | Arousal: ${a}% | Spikes: ${biologicalState.spikes.length}`;
+  }
+
+  // Flapping wings
   const flap = Math.sin(time * 60) * 0.6;
   agentFly.userData.leftWing.rotation.z = flap;
   agentFly.userData.rightWing.rotation.z = -flap;
   
-  agentFly.userData.headGroup.rotation.y = Math.sin(time * 3) * 0.3;
-  agentFly.userData.headGroup.rotation.z = Math.cos(time * 2.5) * 0.2;
+  // Head and leg animation
+  agentFly.userData.headGroup.rotation.y = motor.yaw * 0.1;
   
   agentFly.userData.legs.forEach((leg, idx) => {
     let sway = Math.sin(time * 10 + idx) * 0.1;
@@ -399,34 +432,6 @@ function animate() {
   
   worldControls.update();
   worldRenderer.render(worldScene, worldCamera);
-
-  // --- OPTIMIZED BRAIN VISUALIZATION DECAY ---
-  // Only iterate through the specific neurons that are currently red to fade them back to white
-  if (activeNeurons.size > 0 && brainScene.userData.brainGeo) {
-    const colors = brainScene.userData.brainGeo.attributes.color.array;
-    let needsColorUpdate = false;
-    
-    for (let idx of activeNeurons) {
-      let g = colors[idx * 3 + 1];
-      if (g < 1.0) {
-        g += dt * 0.8; // Fading speed
-        if (g > 1.0) g = 1.0;
-        
-        // As G and B approach 1.0, the red fades back into pure white
-        colors[idx * 3 + 1] = g;
-        colors[idx * 3 + 2] = g;
-        needsColorUpdate = true;
-      } else {
-        // This neuron has successfully returned to pure white, remove from update list to save CPU
-        activeNeurons.delete(idx);
-      }
-    }
-    
-    if (needsColorUpdate) {
-      brainScene.userData.brainGeo.attributes.color.needsUpdate = true;
-    }
-  }
-
   brainRenderer.render(brainScene, brainCamera);
 }
 
