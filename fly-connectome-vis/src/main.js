@@ -363,7 +363,7 @@ fetch('full_brain.json')
 const clock = new THREE.Clock();
 
 // Connect to the Python Biological Conscience
-const ws = new WebSocket('ws://localhost:8768');
+const ws = new WebSocket('ws://localhost:8769');
 let biologicalState = {
   kinematics: { dx: 0, dy: 0, dz: 0, yaw: 0 },
   spikes: [],
